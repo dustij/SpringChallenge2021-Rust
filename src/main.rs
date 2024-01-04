@@ -51,6 +51,7 @@ struct Tree {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 enum ActionType {
     Wait,
     Seed,
@@ -120,29 +121,38 @@ fn choose_action(game_state: &GameState) -> &Action {
     eprintln!("Eval: {}", eval);
 
     // Simple decsisions for now
-    for action in &game_state.possible_actions {
-        match action.action_type {
-            ActionType::Wait => {
-                return action;
-            }
-            ActionType::Seed => {
-                return action;
-            }
-            ActionType::Grow => {
-                return action;
-            }
-            ActionType::Complete => {
-                return action;
-            }
-        }
+    if is_action_possible(&game_state.possible_actions, ActionType::Complete) {
+        return game_state.possible_actions
+            .iter()
+            .find(|action| action.action_type == ActionType::Complete)
+            .unwrap();
+    } else if is_action_possible(&game_state.possible_actions, ActionType::Grow) {
+        return game_state.possible_actions
+            .iter()
+            .find(|action| action.action_type == ActionType::Grow)
+            .unwrap();
+    } else if is_action_possible(&game_state.possible_actions, ActionType::Seed) {
+        return game_state.possible_actions
+            .iter()
+            .find(|action| action.action_type == ActionType::Seed)
+            .unwrap();
+    } else if is_action_possible(&game_state.possible_actions, ActionType::Wait) {
+        return game_state.possible_actions
+            .iter()
+            .find(|action| action.action_type == ActionType::Wait)
+            .unwrap();
+    } else {
+        panic!("Something went wrong while choosing an action");
     }
-
-    panic!("Something went wrong while choosing an action");
 }
 
 // ------------------------------------------------------------------
 //
 // ------------------------------------------------------------------
+
+fn is_action_possible(actions: &[Action], action_type: ActionType) -> bool {
+    actions.iter().any(|action| action.action_type == action_type)
+}
 
 fn evaluate_state(game_state: &GameState) -> f32 {
     let my_score = (game_state.my_score as f32) + (game_state.my_sun as f32) / 3.0;
