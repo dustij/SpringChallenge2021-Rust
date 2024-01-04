@@ -4,6 +4,7 @@ macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap());
 }
 
+#[derive(Debug)]
 struct GameState {
     day: u8,
     nutrients: u8,
@@ -12,8 +13,8 @@ struct GameState {
     trees: Vec<Tree>,
     my_sun: u8,
     my_score: u32,
-    opponent_sun: u8,
-    opponent_score: u32,
+    opp_sun: u8,
+    opp_score: u32,
     opponent_is_waiting: bool,
 }
 
@@ -27,19 +28,21 @@ impl GameState {
             trees: Vec::new(),
             my_sun: 0,
             my_score: 0,
-            opponent_sun: 0,
-            opponent_score: 0,
+            opp_sun: 0,
+            opp_score: 0,
             opponent_is_waiting: false,
         }
     }
 }
 
+#[derive(Debug)]
 struct Cell {
     index: u8,
     richness: u8,
     neighbors: Vec<u8>,
 }
 
+#[derive(Debug)]
 struct Tree {
     cell_index: u8,
     size: u8,
@@ -55,6 +58,7 @@ enum ActionType {
     Complete,
 }
 
+#[derive(Debug)]
 struct Action {
     action_type: ActionType,
     source_cell_index: Option<u8>,
@@ -105,13 +109,85 @@ fn parse_action_to_line(action: &Action) -> String {
 }
 
 // =================================================================================================
+// =================================================================================================
+
+// ------------------------------------------------------------------
+// Action Logic
+// ------------------------------------------------------------------
 
 fn choose_action(game_state: &GameState) -> &Action {
-    // Debugging, choose wait for now
+    let eval = evaluate_state(game_state);
+    eprintln!("Eval: {}", eval);
 
-    &game_state.possible_actions[0]
+    // Simple decsisions for now
+    for action in &game_state.possible_actions {
+        match action.action_type {
+            ActionType::Wait => {
+                return action;
+            }
+            ActionType::Seed => {
+                return action;
+            }
+            ActionType::Grow => {
+                return action;
+            }
+            ActionType::Complete => {
+                return action;
+            }
+        }
+    }
+
+    panic!("Something went wrong while choosing an action");
 }
 
+// ------------------------------------------------------------------
+//
+// ------------------------------------------------------------------
+
+fn evaluate_state(game_state: &GameState) -> f32 {
+    let my_score = (game_state.my_score as f32) + (game_state.my_sun as f32) / 3.0;
+    let opponent_score = (game_state.opp_score as f32) + (game_state.opp_sun as f32) / 3.0;
+
+    if my_score > opponent_score {
+        let diff = my_score - opponent_score;
+
+        if diff > 5.0 {
+            return 1.0 + (diff - 5.0) * 0.001;
+        } else {
+            return 0.5 + (0.5 * diff) / 5.0;
+        }
+    } else if my_score < opponent_score {
+        let diff = opponent_score - my_score;
+
+        if diff > 5.0 {
+            return -1.0 - (diff - 5.0) * 0.001;
+        } else {
+            return -0.5 - (0.5 * diff) / 5.0;
+        }
+    } else {
+        let my_tree_count = game_state.trees
+            .iter()
+            .filter(|tree| tree.is_mine)
+            .collect::<Vec<&Tree>>()
+            .len() as u8;
+
+        let opponent_tree_count = game_state.trees
+            .iter()
+            .filter(|tree| !tree.is_mine)
+            .collect::<Vec<&Tree>>()
+            .len() as u8;
+
+        if my_tree_count > opponent_tree_count {
+            return 0.25 + my_score * 0.001;
+        } else if my_tree_count < opponent_tree_count {
+            return -0.25 + my_score * 0.001;
+        } else {
+            return my_score * 0.001;
+        }
+    }
+}
+
+// =================================================================================================
 // =================================================================================================
 
 fn main() {
@@ -178,8 +254,8 @@ fn main() {
         let opp_score = parse_input!(inputs[1], u32); // opponent's score
         let opp_is_waiting = parse_input!(inputs[2], u8); // whether your opponent is asleep until the next day
 
-        game_state.opponent_sun = opp_sun;
-        game_state.opponent_score = opp_score;
+        game_state.opp_sun = opp_sun;
+        game_state.opp_score = opp_score;
         game_state.opponent_is_waiting = opp_is_waiting == 1;
 
         let mut input_line = String::new();
@@ -228,7 +304,19 @@ fn main() {
         let action_line = parse_action_to_line(&choosen_action);
 
         // Debugging output
-        eprintln!("Action chosen: {}", action_line);
+        eprintln!("Game State:");
+        eprintln!("Day: {}", game_state.day);
+        eprintln!("Nutrients: {}", game_state.nutrients);
+        eprintln!("My Sun: {}", game_state.my_sun);
+        eprintln!("My Score: {}", game_state.my_score);
+        eprintln!("Opponent Sun: {}", game_state.opp_sun);
+        eprintln!("Opponent Score: {}", game_state.opp_score);
+        eprintln!("Opponent is waiting: {}", game_state.opponent_is_waiting);
+        eprintln!("Possible actions: {:?}", game_state.possible_actions);
+        eprintln!("Trees: {:?}", game_state.trees);
+        eprintln!("Cells: {:?}", game_state.cells);
+
+        eprintln!("\nAction chosen: {}", action_line);
 
         // Action output
         println!("{}", action_line); // GROW cell_index | SEED source_index target_index | COMPLETE cell_index | WAIT <message>
