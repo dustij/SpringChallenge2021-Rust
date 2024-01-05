@@ -5,6 +5,7 @@ macro_rules! parse_input {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 struct GameState {
     day: u8,
     nutrients: u8,
@@ -36,22 +37,89 @@ impl GameState {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 struct Cell {
-    index: u8,
+    index: i8,
     richness: u8,
-    neighbors: Vec<u8>,
+    neighbors: Vec<i8>,
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 struct Tree {
-    cell_index: u8,
+    cell_index: i8,
     size: u8,
     is_mine: bool,
     is_dormant: bool,
+    is_shadowed: bool,
+}
+
+fn is_shadowed(game_state: &GameState, cell_index: i8) -> bool {
+    let tree = game_state.trees.iter().find(|tree| tree.cell_index == cell_index);
+
+    match tree {
+        Some(tree) => {
+            let count = tree.size;
+            let tree_size = tree.size;
+
+            fn check_neighbor(
+                game_state: &GameState,
+                cell_index: i8,
+                count: u8,
+                tree_size: u8
+            ) -> bool {
+                let sun_direction = ((game_state.day % 6) + 3) % 6;
+                let cell = game_state.cells
+                    .iter()
+                    .find(|cell| cell.index == cell_index)
+                    .cloned()
+                    .unwrap_or(Cell {
+                        index: -1,
+                        richness: 0,
+                        neighbors: vec![-1, -1, -1, -1, -1, -1],
+                    });
+                let neighbor_cell_index = cell.neighbors[sun_direction as usize];
+
+                if neighbor_cell_index == -1 {
+                    // no cell in that direction
+                    return false;
+                }
+
+                let neighbor_tree = game_state.trees
+                    .iter()
+                    .find(|tree| tree.cell_index == neighbor_cell_index)
+                    .unwrap_or(
+                        &(Tree {
+                            cell_index: -1,
+                            size: 0,
+                            is_mine: false,
+                            is_dormant: false,
+                            is_shadowed: false,
+                        })
+                    );
+
+                if neighbor_tree.cell_index != -1 && neighbor_tree.size >= tree_size {
+                    return true;
+                }
+
+                if count > 1 {
+                    return check_neighbor(game_state, neighbor_cell_index, count - 1, tree_size);
+                } else {
+                    return false;
+                }
+            }
+
+            check_neighbor(game_state, cell_index, count, tree_size)
+        }
+        None => {
+            return false;
+        }
+    }
 }
 
 #[derive(Debug)]
 #[derive(PartialEq)]
+#[derive(Clone)]
 enum ActionType {
     Wait,
     Seed,
@@ -60,10 +128,12 @@ enum ActionType {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
+#[derive(Clone)]
 struct Action {
     action_type: ActionType,
-    source_cell_index: Option<u8>,
-    target_cell_index: Option<u8>,
+    source_cell_index: Option<i8>,
+    target_cell_index: Option<i8>,
 }
 
 fn parse_line_to_action(input: &str) -> Action {
@@ -78,14 +148,14 @@ fn parse_line_to_action(input: &str) -> Action {
     };
 
     let source_cell_index = match action_type {
-        ActionType::Seed => Some(parts[1].parse::<u8>().unwrap()),
+        ActionType::Seed => Some(parts[1].parse::<i8>().unwrap_or(-1)),
         _ => None,
     };
 
     let target_cell_index = match action_type {
-        ActionType::Seed => Some(parts[2].parse::<u8>().unwrap()),
+        ActionType::Seed => Some(parts[2].parse::<i8>().unwrap_or(-1)),
         ActionType::Wait => None,
-        _ => Some(parts[1].parse::<u8>().unwrap()),
+        _ => Some(parts[1].parse::<i8>().unwrap_or(-1)),
     };
 
     Action {
@@ -101,58 +171,146 @@ fn parse_action_to_line(action: &Action) -> String {
         ActionType::Seed =>
             format!(
                 "SEED {} {}",
-                action.source_cell_index.unwrap(),
-                action.target_cell_index.unwrap()
+                action.source_cell_index.unwrap_or(-1),
+                action.target_cell_index.unwrap_or(-1)
             ),
-        ActionType::Grow => format!("GROW {}", action.target_cell_index.unwrap()),
-        ActionType::Complete => format!("COMPLETE {}", action.target_cell_index.unwrap()),
+        ActionType::Grow => format!("GROW {}", action.target_cell_index.unwrap_or(-1)),
+        ActionType::Complete => format!("COMPLETE {}", action.target_cell_index.unwrap_or(-1)),
     }
 }
 
 // =================================================================================================
 // =================================================================================================
+
+fn calculate_sun_points(game_state: &GameState) -> (u8, u8) {
+    // The forest's lesser spirits will harvest sun points from each tree that is not hit by a spooky shadow.
+    // The points will be given to the owner of the tree.
+    // The number of sun points harvested depends on the size of the tree:
+
+    //     A size 0 tree (a seed): no points.
+    //     A size 1 tree: 1 sun point.
+    //     A size 2 tree: 2 sun points.
+    //     A size 3 tree: 3 sun points.
+
+    let mut my_sun = game_state.my_sun;
+    let mut opp_sun = game_state.opp_sun;
+
+    for tree in game_state.trees.iter() {
+        if !tree.is_shadowed {
+            match tree.size {
+                1 => {
+                    if tree.is_mine {
+                        my_sun += 1;
+                    } else {
+                        opp_sun += 1;
+                    }
+                }
+                2 => {
+                    if tree.is_mine {
+                        my_sun += 2;
+                    } else {
+                        opp_sun += 2;
+                    }
+                }
+                3 => {
+                    if tree.is_mine {
+                        my_sun += 3;
+                    } else {
+                        opp_sun += 3;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    (my_sun, opp_sun)
+}
 
 // ------------------------------------------------------------------
 // Action Logic
 // ------------------------------------------------------------------
 
-fn choose_action(game_state: &GameState) -> &Action {
-    let eval = evaluate_state(game_state);
-    eprintln!("Eval: {}", eval);
+fn choose_action(game_state: &GameState) -> Action {
+    run_mcts(game_state, 1000)
+}
 
-    // Simple decsisions for now
-    if is_action_possible(&game_state.possible_actions, ActionType::Complete) {
-        return game_state.possible_actions
-            .iter()
-            .find(|action| action.action_type == ActionType::Complete)
-            .unwrap();
-    } else if is_action_possible(&game_state.possible_actions, ActionType::Grow) {
-        return game_state.possible_actions
-            .iter()
-            .find(|action| action.action_type == ActionType::Grow)
-            .unwrap();
-    } else if is_action_possible(&game_state.possible_actions, ActionType::Seed) {
-        return game_state.possible_actions
-            .iter()
-            .find(|action| action.action_type == ActionType::Seed)
-            .unwrap();
-    } else if is_action_possible(&game_state.possible_actions, ActionType::Wait) {
-        return game_state.possible_actions
-            .iter()
-            .find(|action| action.action_type == ActionType::Wait)
-            .unwrap();
-    } else {
-        panic!("Something went wrong while choosing an action");
+fn apply_action(game_state: &mut GameState, action: &Action) -> GameState {
+    let mut new_game_state = game_state.clone();
+
+    // TODO: need to finish finding shadows before able to calculate sun points to apply action to game state
+
+    match action.action_type {
+        ActionType::Wait => {
+            let (my_sun, opp_sun) = calculate_sun_points(&new_game_state);
+            new_game_state.my_sun = my_sun;
+            new_game_state.opp_sun = opp_sun;
+        }
+        _ => {}
+        // ActionType::Seed => {
+        //     let source_tree = new_game_state.trees
+        //         .iter_mut()
+        //         .find(|tree| tree.cell_index == action.source_cell_index.unwrap())
+        //         .unwrap();
+
+        //     source_tree.is_dormant = true;
+
+        //     let target_cell = new_game_state.cells
+        //         .iter()
+        //         .find(|cell| cell.index == action.target_cell_index.unwrap())
+        //         .unwrap();
+
+        //     new_game_state.my_sun -= 4;
+
+        //     new_game_state.trees.push(Tree {
+        //         cell_index: target_cell.index,
+        //         size: 0,
+        //         is_mine: true,
+        //         is_dormant: true,
+        //         is_shadowed: is_shadowed(&new_game_state, target_cell.index),
+        //     });
+        // }
+        // ActionType::Grow => {
+        //     let target_tree = new_game_state.trees
+        //         .iter_mut()
+        //         .find(|tree| tree.cell_index == action.target_cell_index.unwrap())
+        //         .unwrap();
+
+        //     target_tree.is_dormant = true;
+        //     target_tree.size += 1;
+
+        //     new_game_state.my_sun -= match target_tree.size {
+        //         1 => 1,
+        //         2 => 3,
+        //         3 => 7,
+        //         _ => panic!("Invalid tree size"),
+        //     };
+        // }
+        // ActionType::Complete => {
+        //     let target_tree = new_game_state.trees
+        //         .iter_mut()
+        //         .find(|tree| tree.cell_index == action.target_cell_index.unwrap())
+        //         .unwrap();
+
+        //     target_tree.is_dormant = true;
+
+        //     new_game_state.my_sun -= 4;
+
+        //     new_game_state.my_score += match target_tree.size {
+        //         1 => 1,
+        //         2 => 3,
+        //         3 => 7,
+        //         _ => panic!("Invalid tree size"),
+        //     };
+        // }
     }
+
+    new_game_state
 }
 
 // ------------------------------------------------------------------
-//
+// MCTS
 // ------------------------------------------------------------------
-
-fn is_action_possible(actions: &[Action], action_type: ActionType) -> bool {
-    actions.iter().any(|action| action.action_type == action_type)
-}
 
 fn evaluate_state(game_state: &GameState) -> f32 {
     let my_score = (game_state.my_score as f32) + (game_state.my_sun as f32) / 3.0;
@@ -197,6 +355,116 @@ fn evaluate_state(game_state: &GameState) -> f32 {
     }
 }
 
+#[derive(Clone)]
+struct Node {
+    parent: Option<Box<Node>>,
+    children: Vec<Node>,
+    visit_count: u32,
+    score: f32,
+    game_state: GameState,
+    action: Option<Action>,
+}
+
+fn get_ucb1_score(node: &Node) -> f32 {
+    if node.visit_count == 0 {
+        return f32::MAX;
+    }
+
+    let parent_visit_count = node.parent.as_ref().unwrap_or(
+        &Box::new(Node {
+            parent: None,
+            children: Vec::new(),
+            visit_count: 0,
+            score: 0.0,
+            game_state: GameState::new(),
+            action: None,
+        })
+    ).visit_count as f32;
+    let node_visit_count = node.visit_count as f32;
+    let node_score = node.score as f32;
+
+    node_score + 2.0 * (parent_visit_count.ln() / node_visit_count).sqrt()
+}
+
+fn get_best_node(node: Node) -> Node {
+    if node.children.len() == 0 {
+        return node;
+    }
+
+    let mut best_node = node.children
+        .first()
+        .unwrap_or(
+            &(Node {
+                parent: None,
+                children: Vec::new(),
+                visit_count: 0,
+                score: 0.0,
+                game_state: GameState::new(),
+                action: None,
+            })
+        )
+        .clone();
+
+    for child in node.children.iter() {
+        if get_ucb1_score(child) > get_ucb1_score(&best_node) {
+            best_node = child.clone();
+        }
+    }
+
+    best_node.clone()
+}
+
+struct MCTS {
+    root_node: Node,
+}
+
+fn run_mcts(game_state: &GameState, n: u32) -> Action {
+    let mcts = MCTS {
+        root_node: Node {
+            parent: None,
+            children: Vec::new(),
+            visit_count: 0,
+            score: 0.0,
+            game_state: game_state.clone(),
+            action: None,
+        },
+    };
+
+    for _ in 0..n {
+        let mut node = mcts.root_node.clone();
+
+        while node.children.len() > 0 {
+            node = get_best_node(node);
+        }
+
+        let mut new_node = Node {
+            parent: Some(Box::new(node.clone())),
+            children: Vec::new(),
+            visit_count: 0,
+            score: 0.0,
+            game_state: node.game_state.clone(),
+            action: None,
+        };
+
+        let possible_actions = new_node.game_state.possible_actions.clone();
+
+        for action in possible_actions.iter() {
+            new_node.action = Some(action.clone());
+            new_node.game_state = apply_action(&mut new_node.game_state, action);
+            new_node.score = evaluate_state(&new_node.game_state);
+            node.children.push(new_node.clone());
+        }
+    }
+
+    // Find the child node of the root with the highest score
+    let best_node = mcts.root_node.children
+        .iter()
+        .max_by(|x, y| x.score.partial_cmp(&y.score).unwrap())
+        .unwrap();
+
+    best_node.action.clone().unwrap()
+}
+
 // =================================================================================================
 // =================================================================================================
 
@@ -222,15 +490,15 @@ fn main() {
         let neigh_5 = parse_input!(inputs[7], i32);
 
         game_state.cells.push(Cell {
-            index: index as u8,
+            index: index as i8,
             richness: richness as u8,
             neighbors: vec![
-                neigh_0 as u8,
-                neigh_1 as u8,
-                neigh_2 as u8,
-                neigh_3 as u8,
-                neigh_4 as u8,
-                neigh_5 as u8
+                neigh_0 as i8,
+                neigh_1 as i8,
+                neigh_2 as i8,
+                neigh_3 as i8,
+                neigh_4 as i8,
+                neigh_5 as i8
             ],
         });
     }
@@ -278,16 +546,18 @@ fn main() {
             let mut input_line = String::new();
             io::stdin().read_line(&mut input_line).unwrap();
             let inputs = input_line.split(" ").collect::<Vec<_>>();
-            let cell_index = parse_input!(inputs[0], u8); // location of this tree
+            let cell_index = parse_input!(inputs[0], i8); // location of this tree
             let size = parse_input!(inputs[1], u8); // size of this tree: 0-3
             let is_mine = parse_input!(inputs[2], u8); // 1 if this is your tree
             let is_dormant = parse_input!(inputs[3], u8); // 1 if this tree is dormant
+            let is_shadowed = is_shadowed(&game_state, cell_index);
 
             trees.push(Tree {
                 cell_index,
                 size,
                 is_mine: is_mine == 1,
                 is_dormant: is_dormant == 1,
+                is_shadowed,
             });
         }
 
