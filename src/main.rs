@@ -334,11 +334,11 @@ fn main() {
         eprintln!("Opponent is waiting: {}", game_state.opponent_is_waiting);
         eprintln!("Possible actions: {:?}", game_state.possible_actions);
         eprintln!("Cells: {:?}", game_state.cells);
-        eprintln!("Trees: {:#?}", game_state.trees);
+        eprintln!("Trees: {:?}", game_state.trees);
 
         eprintln!("\nAction chosen: {}", action_ouput);
 
         // Action output
-        println!("{}", action_ouput); // GROW cell_index | SEED source_index target_index | COMPLETE cell_index | WAIT <message>
+        println!("{}", action_ouput);
     }
 }
