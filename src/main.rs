@@ -33,7 +33,7 @@ struct Tree {
     size: u8,
     is_mine: bool,
     is_dormant: bool,
-    is_shadowed: bool,
+    is_shadowed: bool, // TODO: change this to `will_be_shadowed`, and change implementation to look ahead one turn
 }
 
 // -------------------------------------------------
@@ -169,6 +169,10 @@ fn parse_action_to_output(action: &Action) -> String {
 fn get_best_action(game_state: &GameState) -> &Action {
     // Choose random action (for now)
     let choosen_index = (game_state.day % (game_state.possible_actions.len() as u8)) as usize;
+
+    // debug next sun score
+    eprintln!("Next sun score: {}", get_new_sun_score(game_state, true));
+
     game_state.possible_actions[choosen_index].borrow()
 }
 
@@ -208,6 +212,38 @@ impl GameState {
             cells: Vec::<Cell>::new(),
             trees: Vec::<Tree>::new(),
         }
+    }
+}
+
+// -------------------------------------------------
+// Functions
+// -------------------------------------------------
+
+fn get_new_sun_score(game_state: &GameState, is_mine: bool) -> u32 {
+    if is_mine {
+        game_state.my_sun +
+            game_state.trees
+                .iter()
+                .filter(|tree| tree.is_mine)
+                .map(|tree| tree.size as u32)
+                .sum::<u32>() -
+            game_state.trees
+                .iter()
+                .filter(|tree| tree.is_mine && tree.is_shadowed)
+                .map(|tree| tree.size as u32)
+                .sum::<u32>()
+    } else {
+        game_state.opp_sun +
+            game_state.trees
+                .iter()
+                .filter(|tree| !tree.is_mine)
+                .map(|tree| tree.size as u32)
+                .sum::<u32>() -
+            game_state.trees
+                .iter()
+                .filter(|tree| !tree.is_mine && tree.is_shadowed)
+                .map(|tree| tree.size as u32)
+                .sum::<u32>()
     }
 }
 
@@ -333,8 +369,8 @@ fn main() {
         eprintln!("Opponent Score: {}", game_state.opp_score);
         eprintln!("Opponent is waiting: {}", game_state.opponent_is_waiting);
         eprintln!("Possible actions: {:?}", game_state.possible_actions);
-        eprintln!("Cells: {:?}", game_state.cells);
         eprintln!("Trees: {:?}", game_state.trees);
+        eprintln!("Cells: {:?}", game_state.cells);
 
         eprintln!("\nAction chosen: {}", action_ouput);
 
