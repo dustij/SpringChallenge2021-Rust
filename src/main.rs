@@ -234,6 +234,52 @@ fn get_game_context(area: Area) -> GameContext {
 }
 
 // ================================================================================================
+// MCTS
+// ================================================================================================
+
+struct Node {
+    parent: Option<Box<Node>>,
+    children: Vec<Node>,
+    action: Option<Action>,
+    outcome: i32,
+    visits: i32,
+    wins: i32,
+    context: GameContext,
+}
+
+fn uct_value(current_node: &Node, parent_node: &Node, explore_rate: f32) -> f32 {
+    if current_node.visits == 0 {
+        if explore_rate == 0.0 {
+            return f32::INFINITY;
+        } else {
+            return 0.0;
+        }
+    }
+    let wins = current_node.wins as f32;
+    let visits = current_node.visits as f32;
+    let parent_visits = parent_node.visits as f32;
+    wins / visits + explore_rate * (parent_visits.ln() / visits).sqrt()
+}
+
+fn select_node(root_node: &mut Node) {}
+
+/*
+
+Things we will need for simulation:
+
+- Determine the game context based on actions taken by both players for the given turn
+  - This includes the ability to get the following:
+    - Available actions for each player
+    - Each players sun points
+    - Each players score
+    - Each players forest
+    - Nutrients
+    - Day
+
+
+*/
+
+// ================================================================================================
 // Main
 // ================================================================================================
 
