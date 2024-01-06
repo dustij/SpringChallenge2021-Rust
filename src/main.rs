@@ -5,6 +5,10 @@ macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap());
 }
 
+// ================================================================================================
+// Forest
+// ================================================================================================
+
 struct Tree {
     cell_index: i32,
     size: i32,
@@ -19,7 +23,7 @@ fn get_forest() -> Forest {
     let mut input_line = String::new();
     io::stdin().read_line(&mut input_line).unwrap();
     let number_of_trees = parse_input!(input_line, i32); // the current amount of trees
-    for i in 0..number_of_trees as usize {
+    for _ in 0..number_of_trees as usize {
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
         let inputs = input_line.split(" ").collect::<Vec<_>>();
@@ -31,6 +35,10 @@ fn get_forest() -> Forest {
     }
     forest
 }
+
+// ================================================================================================
+// Action
+// ================================================================================================
 
 enum Action {
     Grow(i32),
@@ -49,7 +57,6 @@ impl From<&String> for Action {
             "WAIT" => Action::Wait,
             _ => {
                 panic!("Wrong action input");
-                Action::Wait
             }
         }
     }
@@ -73,7 +80,7 @@ fn get_actionlist() -> ActionList {
     let mut input_line = String::new();
     io::stdin().read_line(&mut input_line).unwrap();
     let number_of_possible_actions = parse_input!(input_line, i32);
-    for i in 0..number_of_possible_actions as usize {
+    for _ in 0..number_of_possible_actions as usize {
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
         let possible_action = input_line.trim_matches('\n').to_string();
@@ -81,6 +88,10 @@ fn get_actionlist() -> ActionList {
     }
     action_list
 }
+
+// ================================================================================================
+// GameContext
+// ================================================================================================
 
 struct GameContext {
     day: i32,
@@ -114,6 +125,9 @@ fn get_game_context() -> GameContext {
     GameContext { day, nutrients, sun, score, op_sun, op_score, op_is_waiting }
 }
 
+// ================================================================================================
+// Area
+// ================================================================================================
 struct Cell {
     index: i32,
     richness: i32,
@@ -134,33 +148,32 @@ fn get_area() -> Area {
         let inputs = input_line.split(" ").collect::<Vec<_>>();
         let index = parse_input!(inputs[0], i32); // 0 is the center cell, the next cells spiral outwards
         let richness = parse_input!(inputs[1], i32); // 0 if the cell is unusable, 1-3 for usable cells
-        let neigh_0 = parse_input!(inputs[2], i32); // the index of the neighbouring cell for each direction
-        let neigh_1 = parse_input!(inputs[3], i32);
-        let neigh_2 = parse_input!(inputs[4], i32);
-        let neigh_3 = parse_input!(inputs[5], i32);
-        let neigh_4 = parse_input!(inputs[6], i32);
-        let neigh_5 = parse_input!(inputs[7], i32);
         for i in 2..8 {
             neighbors_ids.push(parse_input!(inputs[i], i32));
         }
         area.push(Cell { index, richness, neighbors_ids });
     }
+
     area
 }
+
+// ================================================================================================
+// Main
+// ================================================================================================
 
 fn main() {
     let area = get_area();
 
     // game loop
     loop {
-        let mut answer = String::from("WAIT");
+        let answer = String::from("WAIT");
 
         let context = get_game_context();
         let forest = get_forest();
         let action_list = get_actionlist();
 
-        for s in action_list {
-            eprintln!("Action : {}", s);
+        for a in action_list {
+            eprintln!("Action : {}", a);
         }
 
         // GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
