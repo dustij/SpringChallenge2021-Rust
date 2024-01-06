@@ -33,14 +33,14 @@ struct Tree {
     size: u8,
     is_mine: bool,
     is_dormant: bool,
-    is_shadowed: bool, // TODO: change this to `will_be_shadowed`, and change implementation to look ahead one turn
+    is_shadowed_next_turn: bool,
 }
 
 // -------------------------------------------------
 // Functions
 // -------------------------------------------------
 
-fn is_shadowed(game_state: &GameState, size: u8, cell_index: i8) -> bool {
+fn is_shadowed_next_turn(game_state: &GameState, size: u8, cell_index: i8) -> bool {
     fn check_neighbor(
         game_state: &GameState,
         root_tree_size: u8,
@@ -83,7 +83,7 @@ fn is_shadowed(game_state: &GameState, size: u8, cell_index: i8) -> bool {
     }
 
     // Index of sun direction
-    let sun_index = ((game_state.day % 6) + 3) % 6;
+    let sun_index = (game_state.day + (1 % 6) + 3) % 6;
 
     // How many neighbors to check
     let count = size;
@@ -229,7 +229,7 @@ fn get_new_sun_score(game_state: &GameState, is_mine: bool) -> u32 {
                 .sum::<u32>() -
             game_state.trees
                 .iter()
-                .filter(|tree| tree.is_mine && tree.is_shadowed)
+                .filter(|tree| tree.is_mine && tree.is_shadowed_next_turn)
                 .map(|tree| tree.size as u32)
                 .sum::<u32>()
     } else {
@@ -241,7 +241,7 @@ fn get_new_sun_score(game_state: &GameState, is_mine: bool) -> u32 {
                 .sum::<u32>() -
             game_state.trees
                 .iter()
-                .filter(|tree| !tree.is_mine && tree.is_shadowed)
+                .filter(|tree| !tree.is_mine && tree.is_shadowed_next_turn)
                 .map(|tree| tree.size as u32)
                 .sum::<u32>()
     }
@@ -326,14 +326,14 @@ fn main() {
             let size = parse_input!(inputs[1], u8); // size of this tree: 0-3
             let is_mine = parse_input!(inputs[2], u8); // 1 if this is your tree
             let is_dormant = parse_input!(inputs[3], u8); // 1 if this tree is dormant
-            let is_shadowed = is_shadowed(&game_state, size, cell_index);
+            let is_shadowed = is_shadowed_next_turn(&game_state, size, cell_index);
 
             trees.push(Tree {
                 cell_index,
                 size,
                 is_mine: is_mine == 1,
                 is_dormant: is_dormant == 1,
-                is_shadowed,
+                is_shadowed_next_turn: is_shadowed,
             });
         }
 
