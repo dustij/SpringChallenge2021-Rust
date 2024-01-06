@@ -37,7 +37,7 @@ fn get_area() -> Area {
         let index = parse_input!(inputs[0], i32); // 0 is the center cell, the next cells spiral outwards
         let richness = parse_input!(inputs[1], i32); // 0 if the cell is unusable, 1-3 for usable cells
         for i in 2..8 {
-            neighbors_ids[i] = parse_input!(inputs[i], i32);
+            neighbors_ids[i - 2] = parse_input!(inputs[i], i32);
         }
         area[i] = Cell { index, richness, neighbors_ids };
     }
@@ -200,7 +200,7 @@ struct GameContext {
     action_list: ActionList,
 }
 
-fn get_game_context(area: Area, forest: Forest, action_list: ActionList) -> GameContext {
+fn get_game_context(area: Area) -> GameContext {
     let mut input_line = String::new();
     io::stdin().read_line(&mut input_line).unwrap();
     let day = parse_input!(input_line, i32); // the game lasts 24 days: 0-23
@@ -228,8 +228,8 @@ fn get_game_context(area: Area, forest: Forest, action_list: ActionList) -> Game
         op_score,
         op_is_waiting,
         area,
-        forest,
-        action_list,
+        forest: get_forest(),
+        action_list: get_actionlist(),
     }
 }
 
@@ -244,9 +244,7 @@ fn main() {
     loop {
         let answer = String::from("WAIT");
 
-        let forest = get_forest();
-        let action_list = get_actionlist();
-        let context = get_game_context(area, forest, action_list);
+        let context = get_game_context(area);
 
         for a in context.action_list.iter() {
             eprintln!("Action : {}", a);
