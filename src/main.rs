@@ -1,5 +1,6 @@
 use std::io;
 use std::fmt;
+use rand::seq::SliceRandom;
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap());
@@ -49,6 +50,7 @@ fn get_area() -> Area {
 // Forest
 // ================================================================================================
 
+#[derive(Clone, Copy)]
 struct Tree {
     cell_index: i32,
     size: i32,
@@ -78,16 +80,16 @@ fn get_forest() -> Forest {
     forest
 }
 
-fn get_is_shadowed(context: &GameContext, size: i32, cell_index: i32) -> bool {
+fn get_is_shadowed(state: &GameState, size: i32, cell_index: i32) -> bool {
     fn check_neighbor(
-        context: &GameContext,
+        state: &GameState,
         root_tree_size: i32,
         sun_index: i32,
         cell_index: i32,
         count: i32
     ) -> bool {
         // Get reference to cell
-        let cell = context.area
+        let cell = state.area
             .iter()
             .find(|cell| cell.index == cell_index)
             .expect("Could not find cell when checking if shadowed");
@@ -101,7 +103,7 @@ fn get_is_shadowed(context: &GameContext, size: i32, cell_index: i32) -> bool {
         }
 
         // Get reference to neighbor tree
-        let neighbor_tree = context.forest.iter().find(|tree| tree.cell_index == neighbor_index);
+        let neighbor_tree = state.forest.iter().find(|tree| tree.cell_index == neighbor_index);
 
         // Check if there is a neighbor tree and if it is bigger than my tree
         if let Some(found_tree) = neighbor_tree {
@@ -117,23 +119,25 @@ fn get_is_shadowed(context: &GameContext, size: i32, cell_index: i32) -> bool {
         }
 
         // Continue checking neighbors
-        check_neighbor(context, root_tree_size, sun_index, neighbor_index, count - 1)
+        check_neighbor(state, root_tree_size, sun_index, neighbor_index, count - 1)
     }
 
     // Index of sun direction
-    let sun_index = ((context.day % 6) + 3) % 6;
+    let sun_index = ((state.day % 6) + 3) % 6;
 
     // How many neighbors to check
     let count = size;
 
     // Start recursive check
-    check_neighbor(context, size, sun_index, cell_index, count)
+    check_neighbor(state, size, sun_index, cell_index, count)
 }
 
 // ================================================================================================
 // Action
 // ================================================================================================
 
+#[derive(Clone, Copy)]
+#[derive(PartialEq)]
 enum Action {
     Grow(i32),
     Seed(i32, i32),
@@ -184,10 +188,11 @@ fn get_actionlist() -> ActionList {
 }
 
 // ================================================================================================
-// GameContext
+// GameState
 // ================================================================================================
 
-struct GameContext {
+#[derive(Clone)]
+struct GameState {
     day: i32,
     nutrients: i32,
     sun: i32,
@@ -200,7 +205,7 @@ struct GameContext {
     action_list: ActionList,
 }
 
-fn get_game_context(area: Area) -> GameContext {
+fn get_game_state(area: Area) -> GameState {
     let mut input_line = String::new();
     io::stdin().read_line(&mut input_line).unwrap();
     let day = parse_input!(input_line, i32); // the game lasts 24 days: 0-23
@@ -219,7 +224,7 @@ fn get_game_context(area: Area) -> GameContext {
     let op_score = parse_input!(inputs[1], i32); // opponent's score
     let op_is_waiting = parse_input!(inputs[2], i32) == 1; // whether your opponent is asleep until the next day
 
-    GameContext {
+    GameState {
         day,
         nutrients,
         sun,
@@ -233,18 +238,136 @@ fn get_game_context(area: Area) -> GameContext {
     }
 }
 
+fn get_new_state(state: GameState, action: Action) -> GameState {
+    let mut new_state = state.clone();
+
+    match action {
+        Action::Grow(cell_index) => {}
+        Action::Seed(source_index, target_index) => {}
+        Action::Complete(cell_index) => {}
+        Action::Wait => {}
+    }
+
+    new_state.day += 1;
+    new_state.op_is_waiting = false;
+
+    new_state
+}
+
 // ================================================================================================
 // MCTS
 // ================================================================================================
 
-struct Node {
-    parent: Option<Box<Node>>,
-    children: Vec<Node>,
-    action: Option<Action>,
-    outcome: i32,
+#[derive(Clone)]
+// TODO: I should change parent and children to indexes instead,
+// because storing nodes (that also store nodes, that also store nodes, etc) will be a lot of memory (and slow)
+// it may also help my mutablility issues
+struct Node<'a> {
+    parent: Option<&'a Node<'a>>,
+    children: Vec<Node<'a>>,
+    action: Action,
     visits: i32,
     wins: i32,
-    context: GameContext,
+    state: GameState,
+}
+
+fn mcts(root_node: &Node, iterations: i32) -> Action {
+    for _ in 0..iterations {
+        let leaf_node = traverse(root_node);
+        leaf_node.visits += 1;
+        let is_win = rollout(leaf_node);
+
+        if is_win {
+            leaf_node.wins += 1;
+        }
+
+        backpropagate(leaf_node, is_win);
+    }
+
+    return best_action(root_node);
+}
+
+fn traverse<'a>(root_node: &'a mut Node<'a>) -> &'a mut Node<'a> {
+    let mut current_node = root_node;
+
+    while is_fully_expanded(current_node) {
+        current_node = select_child_by_utc(current_node);
+    }
+
+    // If the game day is  23, then the game is over
+    if current_node.state.day == 23 {
+        return current_node;
+    }
+
+    return expand_and_select_child(current_node);
+}
+
+fn is_fully_expanded(node: &Node) -> bool {
+    node.children.len() == node.state.action_list.len()
+}
+
+fn expand_and_select_child<'a>(parent_node: &'a mut Node) -> &'a mut Node<'a> {
+    let unused_actions: Vec<Action> = parent_node.state.action_list
+        .iter()
+        .filter(|action| { !parent_node.children.iter().any(|child| child.action == **action) })
+        .cloned()
+        .collect();
+
+    let random_action: &Action = unused_actions.choose(&mut rand::thread_rng()).unwrap();
+    let mut new_state = get_new_state(parent_node.state, *random_action);
+
+    let new_node = Node {
+        parent: Some(parent_node),
+        children: vec![],
+        action: *random_action,
+        visits: 0,
+        wins: 0,
+        state: new_state,
+    };
+
+    parent_node.children.push(new_node);
+    return parent_node.children.last_mut().unwrap();
+}
+
+fn rollout(node: &Node) -> bool {
+    let mut current_node = node.clone();
+    while current_node.state.day <= 23 {
+        current_node = rollout_policy(current_node);
+    }
+    return current_node.state.score > current_node.state.op_score;
+}
+
+fn rollout_policy(node: Node) -> Node {
+    // From this node, choose a random action, and get the new state, and return the new node (with the new state)
+    let random_action: &Action = node.state.action_list.choose(&mut rand::thread_rng()).unwrap();
+    let mut new_state = get_new_state(node.state.clone(), *random_action);
+
+    let new_node = Node {
+        parent: None,
+        children: vec![],
+        action: *random_action,
+        visits: 0,
+        wins: 0,
+        state: new_state,
+    };
+
+    return new_node;
+}
+
+fn backpropagate(node: &mut Node, is_win: bool) {
+    if node.parent.is_none() {
+        // This is the root node
+        return;
+    }
+
+    let node_parent = node.parent.as_mut().unwrap();
+    node_parent.visits += 1;
+
+    if is_win {
+        node_parent.wins += 1;
+    }
+
+    backpropagate(node_parent, is_win)
 }
 
 fn uct_value(current_node: &Node, parent_node: &Node, explore_rate: f32) -> f32 {
@@ -261,13 +384,35 @@ fn uct_value(current_node: &Node, parent_node: &Node, explore_rate: f32) -> f32 
     wins / visits + explore_rate * (parent_visits.ln() / visits).sqrt()
 }
 
-fn select_node(root_node: &mut Node) {}
+fn select_child_by_utc<'a>(node: &'a Node<'a>) -> &'a Node<'a> {
+    let mut best_utc = f32::NEG_INFINITY;
+    let mut best_child_index = 0;
+
+    for (i, child) in node.children.iter().enumerate() {
+        let utc = uct_value(child, node, 1.0);
+        if utc > best_utc {
+            best_utc = utc;
+            best_child_index = i;
+        }
+    }
+
+    // Get a mutable reference to the best child
+    return node.children.get(best_child_index).unwrap();
+}
+
+fn best_action(node: &Node) -> Action {
+    // Find the child with the most visits
+    node.children
+        .iter()
+        .max_by_key(|child| child.visits)
+        .unwrap().action
+}
 
 /*
 
 Things we will need for simulation:
 
-- Determine the game context based on actions taken by both players for the given turn
+- Determine the game state based on actions taken by both players for the given turn
   - This includes the ability to get the following:
     - Available actions for each player
     - Each players sun points
@@ -290,9 +435,9 @@ fn main() {
     loop {
         let answer = String::from("WAIT");
 
-        let context = get_game_context(area);
+        let state = get_game_state(area);
 
-        for a in context.action_list.iter() {
+        for a in state.action_list.iter() {
             eprintln!("Action : {}", a);
         }
 
